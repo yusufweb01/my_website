@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Python Терминал</title>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(135deg, #2a2a72, #009ffd);
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      color: #f0f0f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 30px 20px;
+    }
+    h2 {
+      margin-bottom: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .editor-container {
+      position: relative;
+      width: 100%;
+      max-width: 900px;
+      background: #1e1e1e;
+      border-radius: 8px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+      display: flex;
+      font-family: monospace;
+      font-size: 16px;
+      line-height: 1.4em;
+    }
+    .line-numbers {
+      padding: 10px 12px;
+      background: #2d2d2d;
+      color: #888;
+      user-select: none;
+      text-align: right;
+      border-top-left-radius: 8px;
+      border-bottom-left-radius: 8px;
+      min-width: 40px;
+    }
+    textarea {
+      width: 100%;
+      padding: 10px 250px;
+      border: none;
+      outline: none;
+      resize: vertical;
+      background: transparent;
+      color: #c6c6c6;
+      font-family: monospace;
+      font-size: 16px;
+      line-height: 1.4em;
+      border-top-right-radius: 8px;
+      border-bottom-right-radius: 8px;
+      min-height: 300px;
+    }
+    button {
+      margin-top: 20px;
+      padding: 12px 30px;
+      font-size: 18px;
+      border: none;
+      border-radius: 25px;
+      background: linear-gradient(45deg, #00c6ff, #0072ff);
+      color: white;
+      cursor: pointer;
+      font-weight: 700;
+      box-shadow: 0 6px 12px rgba(0,114,255,0.5);
+    }
+    #output-container, #error-container {
+      width: 100%;
+      max-width: 900px;
+      margin-top: 25px;
+      border-radius: 8px;
+      padding: 15px 20px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      min-height: 50px;
+      overflow-y: auto;
+    }
+    #output-container {
+      background: #121212;
+      color: #0f0;
+      box-shadow: 0 8px 20px rgba(0,255,0,0.25);
+      display: none;
+    }
+    #error-container {
+      background: #330000;
+      color: #ff4c4c;
+      box-shadow: 0 8px 20px rgba(255,0,0,0.3);
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<h2>Python Терминал</h2>
+
+<div class="editor-container">
+  <div class="line-numbers" id="lineNumbers">1</div>
+  <textarea id="code" spellcheck="false" autofocus>print("Привет, мир!")</textarea>
+</div>
+
+<button onclick="runCode()">▶ Запустить</button>
+
+<div id="output-container"></div>
+<div id="error-container"></div>
+
+<script>
+  const textarea = document.getElementById('code');
+  const lineNumbers = document.getElementById('lineNumbers');
+  const outputContainer = document.getElementById('output-container');
+  const errorContainer = document.getElementById('error-container');
+
+  function updateLineNumbers() {
+    const lines = textarea.value.split('\n').length;
+    lineNumbers.textContent = Array.from({length: lines}, (_, i) => i + 1).join('\n');
+  }
+
+  textarea.addEventListener('input', updateLineNumbers);
+  textarea.addEventListener('scroll', () => {
+    lineNumbers.scrollTop = textarea.scrollTop;
+  });
+  updateLineNumbers();
+
+  let pyodideReady = false;
+  let pyodide;
+
+  async function initPyodide() {
+    pyodide = await loadPyodide();
+    pyodideReady = true;
+  }
+  initPyodide();
+
+  async function runCode() {
+    if (!pyodideReady) {
+      alert("Pyodide ещё загружается...");
+      return;
+    }
+
+    const code = textarea.value;
+
+    try {
+      let output = "";
+
+      // Перехватываем stdout и stderr
+      pyodide.setStdout({
+        batched: (msg) => { output += msg; }
+      });
+      pyodide.setStderr({
+        batched: (msg) => { output += msg; }
+      });
+
+      // Выполняем код
+      await pyodide.runPythonAsync(code);
+
+      // Показываем только если есть вывод
+      if (output.trim()) {
+        outputContainer.textContent = output;
+        outputContainer.style.display = "block";
+      } else {
+        outputContainer.style.display = "none";
+      }
+
+      errorContainer.style.display = "none";
+
+    } catch (err) {
+      errorContainer.textContent = err;
+      errorContainer.style.display = "block";
+      outputContainer.style.display = "none";
+    }
+  }
+</script>
+
+</body>
+</html>
