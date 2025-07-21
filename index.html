@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Python Терминал</title>
   <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
   <style>
@@ -52,7 +52,6 @@
       resize: vertical;
       background: transparent;
       color: #c6c6c6;
-      font-family: monospace;
       font-size: 16px;
       line-height: 1.4em;
       border-top-right-radius: 8px;
@@ -71,16 +70,18 @@
       font-weight: 700;
       box-shadow: 0 6px 12px rgba(0,114,255,0.5);
     }
-    #output-container, #error-container {
+    #input-container, #output-container, #error-container {
       width: 100%;
       max-width: 900px;
-      margin-top: 25px;
+      margin-top: 20px;
       border-radius: 8px;
       padding: 15px 20px;
       font-family: monospace;
       white-space: pre-wrap;
-      min-height: 50px;
-      overflow-y: auto;
+    }
+    #input-container {
+      background: #222;
+      display: none;
     }
     #output-container {
       background: #121212;
@@ -94,6 +95,20 @@
       box-shadow: 0 8px 20px rgba(255,0,0,0.3);
       display: none;
     }
+    canvas {
+      margin-top: 25px;
+      background: white;
+      border-radius: 8px;
+      display: none;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+    }
+    input[type="text"] {
+      width: 80%;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 16px;
+      margin-right: 10px;
+    }
   </style>
 </head>
 <body>
@@ -102,19 +117,27 @@
 
 <div class="editor-container">
   <div class="line-numbers" id="lineNumbers">1</div>
-  <textarea id="code" spellcheck="false" autofocus>print("Привет, мир!")</textarea>
+  <textarea id="code" spellcheck="false" autofocus></textarea>
+</div>
+
+<div id="input-container">
+  <label>Ввод: <input type="text" id="userInput"><button onclick="submitInput()">OK</button></label>
 </div>
 
 <button onclick="runCode()">▶ Запустить</button>
 
 <div id="output-container"></div>
 <div id="error-container"></div>
+<canvas id="turtle-canvas" width="800" height="600"></canvas>
 
 <script>
   const textarea = document.getElementById('code');
   const lineNumbers = document.getElementById('lineNumbers');
   const outputContainer = document.getElementById('output-container');
   const errorContainer = document.getElementById('error-container');
+  const inputContainer = document.getElementById('input-container');
+  const userInput = document.getElementById('userInput');
+  const turtleCanvas = document.getElementById('turtle-canvas');
 
   function updateLineNumbers() {
     const lines = textarea.value.split('\n').length;
@@ -129,12 +152,35 @@
 
   let pyodideReady = false;
   let pyodide;
+  let stdinQueue = [];
 
   async function initPyodide() {
     pyodide = await loadPyodide();
+
+    // Перехватываем стандартный ввод
+    pyodide.setStdin({
+      readline: () => {
+        return new Promise(resolve => {
+          inputContainer.style.display = "block";
+          userInput.value = "";
+          userInput.focus();
+          stdinQueue.push(resolve);
+        });
+      }
+    });
+
     pyodideReady = true;
   }
+
   initPyodide();
+
+  function submitInput() {
+    if (stdinQueue.length > 0) {
+      const resolve = stdinQueue.shift();
+      inputContainer.style.display = "none";
+      resolve(userInput.value + "\n"); // обязательно с \n
+    }
+  }
 
   async function runCode() {
     if (!pyodideReady) {
@@ -143,35 +189,44 @@
     }
 
     const code = textarea.value;
+    outputContainer.textContent = "";
+    errorContainer.textContent = "";
+    outputContainer.style.display = "none";
+    errorContainer.style.display = "none";
+    inputContainer.style.display = "none";
+    turtleCanvas.style.display = "none";
 
     try {
       let output = "";
 
-      // Перехватываем stdout и stderr
-      pyodide.setStdout({
-        batched: (msg) => { output += msg; }
-      });
-      pyodide.setStderr({
-        batched: (msg) => { output += msg; }
-      });
+      pyodide.setStdout({ batched: msg => output += msg });
+      pyodide.setStderr({ batched: msg => output += msg });
 
-      // Выполняем код
+      // Turtle init (если нужен)
+      await pyodide.runPythonAsync(`
+import sys
+import js
+try:
+    import turtle
+    turtle.TurtleScreen._RUNNING = True
+    js.turtleCanvas.style.display = "block"
+    screen = turtle.Screen()
+    screen._root = None
+    screen.cv = js.turtleCanvas
+except:
+    pass
+      `);
+
       await pyodide.runPythonAsync(code);
 
-      // Показываем только если есть вывод
       if (output.trim()) {
         outputContainer.textContent = output;
         outputContainer.style.display = "block";
-      } else {
-        outputContainer.style.display = "none";
       }
-
-      errorContainer.style.display = "none";
 
     } catch (err) {
       errorContainer.textContent = err;
       errorContainer.style.display = "block";
-      outputContainer.style.display = "none";
     }
   }
 </script>
